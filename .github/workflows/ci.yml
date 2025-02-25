@@ -9,28 +9,49 @@ on:
       - main
 
 jobs:
-  laravel-tests:
+  build:
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        php-versions: [8.0, 8.1, 8.2]
+
     steps:
-      - name: Clonar el repositorio
+      - name: 📥 Checkout del repositorio
         uses: actions/checkout@v3
 
-      - name: Configurar PHP
+      - name: 🛠️ Configurar PHP ${{ matrix.php-versions }}
         uses: shivammathur/setup-php@v2
         with:
-          php-version: 8.2
-          tools: composer
+          php-version: ${{ matrix.php-versions }}
+          tools: composer:v2
+          extensions: mbstring, pdo, pdo_mysql, intl, bcmath
+          coverage: none
 
-      - name: Instalar dependencias con Composer
-        run: composer install --no-progress --no-suggest --prefer-dist --optimize-autoloader
+      - name: ⚡ Cache de dependencias de Composer
+        uses: actions/cache@v3
+        with:
+          path: vendor
+          key: composer-${{ runner.os }}-${{ hashFiles('**/composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
 
-      - name: Configurar el entorno
+      - name: 📦 Instalar dependencias de Composer
+        run: composer install --no-progress --prefer-dist --optimize-autoloader
+
+      - name: 🔍 Ejecutar PHPStan (Análisis estático)
+        run: vendor/bin/phpstan analyse --memory-limit=512M
+
+      - name: 🎨 Verificar formato de código con PHP CS Fixer
+        run: vendor/bin/php-cs-fixer fix --dry-run --diff
+
+      - name: 🛠️ Copiar archivo .env
         run: cp .env.example .env
 
-      - name: Generar clave de la aplicación
+      - name: 🗝️ Generar clave de aplicación
         run: php artisan key:generate
 
-      - name: Ejecutar pruebas
+      - name: 🏗️ Ejecutar migraciones
+        run: php artisan migrate --force
 
+      - name: ✅ Ejecutar pruebas unitarias
         run: php artisan test
